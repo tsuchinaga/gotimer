@@ -290,14 +290,44 @@ func Test_Timer_Run(t *testing.T) {
 	}
 }
 
+func Test_Timer_Run_Cancel(t *testing.T) {
+	t.Parallel()
+	var count int
+	timer := new(Timer)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	interval := 3 * time.Second
+	task := func() { count++ }
+	got := timer.Run(ctx, interval, task)
+	if count != 0 || got != nil {
+		t.Errorf("%s error\nwant: %+v, %+v\ngot: %+v, %+v\n", t.Name(), 0, nil, count, got)
+	}
+	cancel()
+}
+
+func Test_Timer_Run_Task(t *testing.T) {
+	t.Parallel()
+	var count int
+	timer := new(Timer)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	interval := 1 * time.Second
+	task := func() { count++ }
+	got := timer.Run(ctx, interval, task)
+	if count != 3 || got != nil {
+		t.Errorf("%s error\nwant: %+v, %+v\ngot: %+v, %+v\n", t.Name(), 3, nil, count, got)
+	}
+	cancel()
+}
+
 func Test_Timer_Run_Exec(t *testing.T) {
+	t.Parallel()
 	t.Skip()
 
 	timer := new(Timer)
 	timer.AddStartTime(&Time{hour: 16, minute: 24, second: 0})
 	timer.AddStopTime(&Time{hour: 16, minute: 24, second: 15})
-	ctx, _ := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	interval := 3 * time.Second
 	task := func() { fmt.Println(time.Now()) }
 	t.Log(timer.Run(ctx, interval, task))
+	cancel()
 }
