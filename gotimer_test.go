@@ -3,8 +3,8 @@ package gotimer
 import (
 	"context"
 	"errors"
-	"fmt"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 )
@@ -275,7 +275,7 @@ func Test_Timer_Run(t *testing.T) {
 		{name: "ctxが未設定ならerror", timer: &Timer{}, want: TimerNotSetContextError},
 		{name: "intervalが1未満ならerror", timer: &Timer{}, ctx: context.Background(), want: TimerNotSetIntervalError},
 		{name: "taskがnilならerror", timer: &Timer{}, ctx: context.Background(), interval: 15 * time.Second, want: TimerNotSetTaskError},
-		{name: "isRunningがtrueならerror", timer: &Timer{running: true}, ctx: context.Background(), interval: 15 * time.Second, task: func() {}, want: TimerIsRunningError},
+		{name: "isRunningがtrueならerror", timer: &Timer{timerRunning: true}, ctx: context.Background(), interval: 15 * time.Second, task: func() {}, want: TimerIsRunningError},
 	}
 
 	for _, test := range tests {
@@ -318,16 +318,38 @@ func Test_Timer_Run_Task(t *testing.T) {
 	cancel()
 }
 
-func Test_Timer_Run_Exec(t *testing.T) {
+func Test_Timer_Run_Parallel(t *testing.T) {
 	t.Parallel()
-	t.Skip()
+	tests := []struct {
+		name     string
+		parallel bool
+		timeout  time.Duration
+		interval time.Duration
+		want     int
+	}{
+		{name: "Parallelが許可されている場合、複数回実行される", parallel: true, timeout: 1 * time.Second, interval: 100 * time.Millisecond, want: 10},
+		{name: "Parallelが許可されていない場合、1回しか実行されない", parallel: false, timeout: 1 * time.Second, interval: 100 * time.Millisecond, want: 1},
+	}
 
-	timer := new(Timer)
-	timer.AddStartTime(&Time{hour: 16, minute: 24, second: 0})
-	timer.AddStopTime(&Time{hour: 16, minute: 24, second: 15})
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-	interval := 3 * time.Second
-	task := func() { fmt.Println(time.Now()) }
-	t.Log(timer.Run(ctx, interval, task))
-	cancel()
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var count int
+			var mtx sync.Mutex
+			task := func() {
+				mtx.Lock()
+				count++
+				mtx.Unlock()
+				time.Sleep(test.timeout)
+			}
+			timer := new(Timer)
+			ctx, cancel := context.WithTimeout(context.Background(), test.timeout)
+			defer cancel()
+			err := timer.SetParallelRunnable(test.parallel).Run(ctx, test.interval, task)
+			if test.want != count && err != nil {
+				t.Errorf("%s error\nwant: %+v\ngot: %+v, %+v\n", t.Name(), test.want, count, err)
+			}
+		})
+	}
 }

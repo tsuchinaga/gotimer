@@ -20,14 +20,22 @@ var (
 
 // Timer - タイマー
 type Timer struct {
-	interval   time.Duration
-	startTimes []*Time
-	stopTimes  []*Time
-	ch         chan time.Time
-	running    bool
-	next       time.Time
-	timer      time.Timer
-	mtx        sync.Mutex
+	interval         time.Duration
+	startTimes       []*Time
+	stopTimes        []*Time
+	ch               chan time.Time
+	timerRunning     bool
+	taskRunning      int
+	parallelRunnable bool
+	next             time.Time
+	timer            time.Timer
+	mtx              sync.Mutex
+}
+
+// SetParallelRunnable - タスクの多重実行を許容するか
+func (t *Timer) SetParallelRunnable(runnable bool) *Timer {
+	t.parallelRunnable = runnable
+	return t
 }
 
 // AddStartTime - 開始時刻を追加する
@@ -82,14 +90,14 @@ func (t *Timer) Run(ctx context.Context, interval time.Duration, task func()) er
 
 	// 開始してフラグを立てるまでは排他ロック
 	t.mtx.Lock()
-	if t.running {
+	if t.timerRunning {
 		t.mtx.Unlock()
 		return TimerIsRunningError
 	}
-	t.running = true
+	t.timerRunning = true
 	defer func() {
 		t.mtx.Lock()
-		t.running = false
+		t.timerRunning = false
 		t.mtx.Unlock()
 	}()
 	t.mtx.Unlock()
@@ -103,13 +111,40 @@ func (t *Timer) Run(ctx context.Context, interval time.Duration, task func()) er
 		d := t.next.Sub(now)
 		tm := time.NewTimer(d)
 		select {
-		case <-tm.C: // 実行時間が来たら実行
-			task()
+		case <-tm.C: // 実行時間が来たら非同期で実行
+			go func() {
+				if t.incrementTaskRunning() { // タスク実行中でないか、多重起動許容の場合にタスクを実行する
+					defer t.decrementTaskRunning()
+					task()
+				}
+			}()
 		case <-ctx.Done(): // ctxの終了ならreturn nil
 			tm.Stop() // そのまま捨てられるタイマーなので発火済みかなど気にしない
 			return nil
 		}
 	}
+}
+
+// incrementTaskRunning - 実行中のタスクのカウントを増やす
+//   ただし、多重起動不可なら複数起動はしないので、その場合は実質上限1
+func (t *Timer) incrementTaskRunning() bool {
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+
+	// タスク実行中かつ、多重起動不可ならロックが取れない
+	if t.taskRunning > 0 && !t.parallelRunnable {
+		return false
+	}
+
+	t.taskRunning++
+	return true
+}
+
+// decrementTaskRunning - 実行中のタスクのカウントを減らす
+func (t *Timer) decrementTaskRunning() {
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+	t.taskRunning--
 }
 
 // sortStartTimesFunc - 開始時刻をソートする関数
