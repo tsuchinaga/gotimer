@@ -9,9 +9,6 @@ import (
 )
 
 var (
-	TimeHourError            = errors.New("hours is between 0 to 24")
-	TimeMinuteError          = errors.New("minute is between 0 to 60")
-	TimeSecondError          = errors.New("second is between 0 to 60")
 	TimerNotSetContextError  = errors.New("not set ctx")
 	TimerNotSetIntervalError = errors.New("not set interval")
 	TimerNotSetTaskError     = errors.New("not set task")
@@ -211,20 +208,20 @@ func (t *Timer) nextStop(now time.Time) time.Time {
 }
 
 // NewTime - 新しいgotimer.Timeを生成する
-func NewTime(hour, minute, second int) (*Time, error) {
-	if hour < 0 || 24 <= hour {
-		return nil, TimeHourError
+func NewTime(hour, minute, second int) *Time {
+	sec := (hour*60*60 + minute*60 + second) % (24 * 60 * 60)
+	if sec < 0 {
+		sec = 24*60*60 + sec
 	}
 
-	if minute < 0 || 60 <= minute {
-		return nil, TimeMinuteError
-	}
+	t := new(Time)
+	t.hour = sec / (60 * 60)
+	sec %= 60 * 60
 
-	if second < 0 || 60 <= second {
-		return nil, TimeSecondError
-	}
+	t.minute = sec / 60
+	t.second = sec % 60
 
-	return &Time{hour: hour, minute: minute, second: second}, nil
+	return t
 }
 
 // Time - 時分秒だけを持った構造体

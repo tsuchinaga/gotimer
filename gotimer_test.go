@@ -2,7 +2,6 @@ package gotimer
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"sync"
 	"testing"
@@ -14,26 +13,33 @@ func Test_NewTime(t *testing.T) {
 	tests := []struct {
 		name                 string
 		hour, minute, second int
-		want1                *Time
-		want2                error
+		want                 *Time
 	}{
-		{name: "00:00:00は可能", hour: 0, minute: 0, second: 0, want1: &Time{hour: 0, minute: 0, second: 0}},
-		{name: "23:59:59は可能", hour: 23, minute: 59, second: 59, want1: &Time{hour: 23, minute: 59, second: 59}},
-		{name: "-01:00:00はエラー", hour: -1, minute: 0, second: 0, want2: TimeHourError},
-		{name: "00:-01:00はエラー", hour: 0, minute: -1, second: 0, want2: TimeMinuteError},
-		{name: "00:00:-01はエラー", hour: 0, minute: 0, second: -1, want2: TimeSecondError},
-		{name: "24:00:00はエラー", hour: 24, minute: 0, second: 0, want2: TimeHourError},
-		{name: "00:60:00はエラー", hour: 0, minute: 60, second: 0, want2: TimeMinuteError},
-		{name: "00:00:60はエラー", hour: 0, minute: 0, second: 60, want2: TimeSecondError},
+		{name: "00:00:00 => 0, 0, 0", hour: 0, minute: 0, second: 0, want: &Time{hour: 0, minute: 0, second: 0}},
+		{name: "23:59:59 => 23, 59, 59", hour: 23, minute: 59, second: 59, want: &Time{hour: 23, minute: 59, second: 59}},
+		{name: "-24:00:00 => 0, 0, 0", hour: -24, minute: 0, second: 0, want: &Time{hour: 0, minute: 0, second: 0}},
+		{name: "-01:00:00 => 23, 0, 0", hour: -1, minute: 0, second: 0, want: &Time{hour: 23, minute: 0, second: 0}},
+		{name: "00:-01:00 => 23, 59, 0", hour: 0, minute: -1, second: 0, want: &Time{hour: 23, minute: 59, second: 0}},
+		{name: "00:00:-01 => 23, 59, 59", hour: 0, minute: 0, second: -1, want: &Time{hour: 23, minute: 59, second: 59}},
+		{name: "00:00:-61 => 23, 58, 59", hour: 0, minute: 0, second: -61, want: &Time{hour: 23, minute: 58, second: 59}},
+		{name: "00:00:-86400 => 0, 0, 0", hour: 0, minute: 0, second: -86400, want: &Time{hour: 0, minute: 0, second: 0}},
+		{name: "00:00:-86401 => 23, 59, 59", hour: 0, minute: 0, second: -86401, want: &Time{hour: 23, minute: 59, second: 59}},
+		{name: "24:59:-86401 => 23, 59, 59", hour: 24, minute: 59, second: -86401, want: &Time{hour: 0, minute: 58, second: 59}},
+		{name: "24:60:60 => 1, 1, 0", hour: 24, minute: 60, second: 60, want: &Time{hour: 1, minute: 1, second: 0}},
+		{name: "24:00:00 => 0, 0, 0", hour: 24, minute: 0, second: 0, want: &Time{hour: 0, minute: 0, second: 0}},
+		{name: "00:60:00 => 1, 0, 0", hour: 0, minute: 60, second: 0, want: &Time{hour: 1, minute: 0, second: 0}},
+		{name: "00:00:60 => 0, 1, 0", hour: 0, minute: 0, second: 60, want: &Time{hour: 0, minute: 1, second: 0}},
+		{name: "23:59:60 => 0, 0, 0", hour: 23, minute: 59, second: 60, want: &Time{hour: 0, minute: 0, second: 0}},
+		{name: "24:00:-01 => 23, 59, 59", hour: 24, minute: 0, second: -1, want: &Time{hour: 23, minute: 59, second: 59}},
 	}
 
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			got1, got2 := NewTime(test.hour, test.minute, test.second)
-			if !reflect.DeepEqual(test.want1, got1) || !errors.Is(got2, test.want2) {
-				t.Errorf("%s error\nwant: %+v, %+v\ngot: %+v, %+v\n", t.Name(), test.want1, test.want2, got1, got2)
+			got := NewTime(test.hour, test.minute, test.second)
+			if !reflect.DeepEqual(test.want, got) {
+				t.Errorf("%s error\nwant: %+v\ngot: %+v\n", t.Name(), test.want, got)
 			}
 		})
 	}
