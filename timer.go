@@ -24,6 +24,7 @@ type Timer struct {
 	timerRunning     bool
 	taskRunning      int
 	parallelRunnable bool
+	startNow         bool
 	next             time.Time
 	timer            time.Timer
 	mtx              sync.Mutex
@@ -39,6 +40,19 @@ func (t *Timer) SetParallelRunnable(runnable bool) *Timer {
 	}
 
 	t.parallelRunnable = runnable
+	return t
+}
+
+// SetStartNow - タスクの初回実行をすぐに行うか
+func (t *Timer) SetStartNow(startNow bool) *Timer {
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+
+	if t.timerRunning {
+		return t
+	}
+
+	t.startNow = startNow
 	return t
 }
 
@@ -146,20 +160,22 @@ func (t *Timer) decrementTaskRunning() {
 
 // nextTime - 次回実行日時を取得する
 func (t *Timer) nextTime(now time.Time) time.Time {
-	var nt time.Time
 	// nextがzeroタイムなら直近の開始日時を設定する、zeroタイムでなければ前回実行日時 + intervalを設定する
 	if t.next.IsZero() {
-		nt = t.nextStart(now)
+		if t.startNow && t.runnable(now) {
+			return now
+		} else {
+			return t.nextStart(now)
+		}
 	} else {
-		nt = t.next.Add(t.interval)
+		nt := t.next.Add(t.interval)
 
 		// 次回実行日時が実行可能でなければ、次の開始時刻を採用する
 		if !t.runnable(nt) {
 			nt = t.nextStart(now)
 		}
+		return nt
 	}
-
-	return nt
 }
 
 // nextStart - 次の開始日時を取得する

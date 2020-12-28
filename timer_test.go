@@ -198,6 +198,18 @@ func Test_Timer_nextTime(t *testing.T) {
 				next:     time.Date(2020, 12, 21, 11, 0, 0, 0, time.Local)},
 			now:  time.Date(2020, 12, 21, 11, 0, 0, 0, time.Local),
 			want: time.Date(2020, 12, 22, 11, 0, 0, 0, time.Local)},
+		{name: "前回の実行日時が分からなくて、即時実行可能なら現在日時を返す",
+			timer: &Timer{
+				terms:    []Term{NewTerm(NewTime(10, 0, 0), NewTime(12, 0, 0))},
+				startNow: true},
+			now:  time.Date(2020, 12, 21, 11, 0, 0, 0, time.Local),
+			want: time.Date(2020, 12, 21, 11, 0, 0, 0, time.Local)},
+		{name: "前回の実行日時が分からなくて、即時実行可能でもtermsがなければ次の開始日時を返す",
+			timer: &Timer{
+				terms:    []Term{NewTerm(NewTime(11, 0, 0), NewTime(12, 0, 0))},
+				startNow: true},
+			now:  time.Date(2020, 12, 21, 13, 0, 0, 0, time.Local),
+			want: time.Date(2020, 12, 22, 11, 0, 0, 0, time.Local)},
 	}
 
 	for _, test := range tests {
@@ -325,6 +337,31 @@ func Test_Timer_incrementTaskRunning(t *testing.T) {
 			got := timer.incrementTaskRunning()
 			if !reflect.DeepEqual(test.want1, got) || !reflect.DeepEqual(test.want2, timer.taskRunning) {
 				t.Errorf("%s error\nwant: %+v, %+v\ngot: %+v, %+v\n", t.Name(), test.want1, test.want2, got, timer.taskRunning)
+			}
+		})
+	}
+}
+
+func Test_Timer_SetStartNow(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name         string
+		timerRunning bool
+		want         bool
+	}{
+		{name: "timerRunningでなければ設定が反映される", timerRunning: false, want: true},
+		{name: "timerRunningであれば設定が反映されない", timerRunning: true, want: false},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			timer := &Timer{timerRunning: test.timerRunning}
+			timer.SetStartNow(true)
+			got := timer.startNow
+			if !reflect.DeepEqual(test.want, got) {
+				t.Errorf("%s error\nwant: %+v\ngot: %+v\n", t.Name(), test.want, got)
 			}
 		})
 	}
